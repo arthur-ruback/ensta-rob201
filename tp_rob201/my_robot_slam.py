@@ -3,14 +3,15 @@ Robot controller definition
 Complete controller including SLAM, planning, path following
 """
 import numpy as np
+from time import sleep
 
 from place_bot.entities.robot_abstract import RobotAbstract
 from place_bot.entities.odometer import OdometerParams
 from place_bot.entities.lidar import LidarParams
 
 from tiny_slam import TinySlam
-
-from control import reactive_obst_avoid
+    
+from control import reactive_obst_avoid, potential_field_control
 
 
 # Definition of our robot controller
@@ -43,11 +44,17 @@ class MyRobotSlam(RobotAbstract):
         """
         Main control function executed at each time step
         """
-        self.counter += 1
-
-        self.tiny_slam.compute()
+        objectif = np.array([-50,-200,1])
 
         # Compute new command speed to perform obstacle avoidance
+        #command = potential_field_control(self.lidar(),self.odometer_values(),objectif)
         command = reactive_obst_avoid(self.lidar())
+
+        self.tiny_slam.update_map(self.lidar(),self.odometer_values())
+
+        if self.counter % 10 == 0:
+            self.tiny_slam.display2(self.odometer_values())
+
+        self.counter += 1
 
         return command

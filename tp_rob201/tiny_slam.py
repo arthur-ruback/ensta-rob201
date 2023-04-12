@@ -6,6 +6,13 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
+PROB_SOIL = 4
+PROF_FORTE = 0.95
+PROB_FAIBLE = 0.1
+prob_forte = np.log(PROF_FORTE/(1-PROF_FORTE))
+prob_faible = np.log(PROB_FAIBLE/(1-PROB_FAIBLE))
+prob_forte = 0.25
+prob_faible = -0.05
 
 class TinySlam:
     """Simple occupancy grid SLAM"""
@@ -168,6 +175,33 @@ class TinySlam:
         # TODO for TP3
 
 
+        values = lidar.get_sensor_values()
+        angles = lidar.get_ray_angles()
+
+        # repaire du robot: x devant et y sur la gauche
+        x = pose[0] + values * np.cos(angles+pose[2])
+        y = pose[1] + values * np.sin(angles+pose[2])
+
+        # corrige le repaire avec la pose du robot
+
+        # dans le repaire absolut (ou au moins ce qu'il pense le robot)
+        points = np.vstack((x,y))
+
+        for pair in points.T:
+            self.add_map_line(pose[0],pose[1],pair[0],pair[1],prob_faible)
+
+        # only the values that are obstacles
+        mask = values < lidar.max_range
+        x = x[mask]
+        y = y[mask]
+
+        self.add_map_points(x,y,prob_forte)
+
+        # seuillage
+        self.occupancy_map[self.occupancy_map > PROB_SOIL] = PROB_SOIL
+        self.occupancy_map[self.occupancy_map < -PROB_SOIL] = -PROB_SOIL
+
+
     def plan(self, start, goal):
         """
         Compute a path using A*, recompute plan if start or goal change
@@ -253,17 +287,3 @@ class TinySlam:
         filename : base name (without extension) of file on disk
         """
         # TODO
-
-    def compute(self):
-        """ Useless function, just for the exercise on using the profiler """
-        # Remove after TP1
-
-        ranges = np.random.rand(3600)
-        ray_angles = np.arange(-np.pi,np.pi,np.pi/1800)
-
-        # Poor implementation of polar to cartesian conversion
-        points = []
-        for i in range(3600):
-            pt_x = ranges[i] * np.cos(ray_angles[i])
-            pt_y = ranges[i] * np.sin(ray_angles[i])
-            points.append([pt_x,pt_y])
