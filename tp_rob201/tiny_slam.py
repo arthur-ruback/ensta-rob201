@@ -6,13 +6,17 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
-PROB_SOIL = 4
-PROF_FORTE = 0.95
-PROB_FAIBLE = 0.1
-prob_forte = np.log(PROF_FORTE/(1-PROF_FORTE))
-prob_faible = np.log(PROB_FAIBLE/(1-PROB_FAIBLE))
-prob_forte = 0.25
-prob_faible = -0.05
+PROB_SOIL = 1
+# PROF_FORTE = 0.99
+# PROB_FAIBLE = 0.1
+# prob_faible = np.log(PROB_FAIBLE/(1-PROB_FAIBLE))
+# prob_forte = np.log(PROF_FORTE/(1-PROF_FORTE)) + prob_faible
+prob_forte = 0.5
+prob_faible = -0.1
+N_it_loc = 100
+var_x = 3
+var_y = 3
+var_ang = 0.1
 
 class TinySlam:
     """Simple occupancy grid SLAM"""
@@ -128,7 +132,6 @@ class TinySlam:
 
         self.occupancy_map[x_px, y_px] += val
 
-
     def score(self, lidar, pose):
         """
         Computes the sum of log probabilities of laser end points in the map
@@ -137,20 +140,57 @@ class TinySlam:
         """
         # TODO for TP4
 
-        score = 0
+        values = lidar.get_sensor_values()
+        angles = lidar.get_ray_angles()
 
+        # filter lidar max values
+        mask = values < lidar.max_range
+        values = values[mask]
+        angles = angles[mask]
+
+        # get updated pose
+        #pose = self.get_corrected_pose(pose)
+
+        # repaire du robot: x devant et y sur la gauche
+        x = pose[0] + values * np.cos(angles+pose[2])
+        y = pose[1] + values * np.sin(angles+pose[2])
+
+        # get nearest grid point in the map and add its value to score
+        x_px, y_px = self._conv_world_to_map(x,y)
+        select = np.logical_and(np.logical_and(x_px >= 0, x_px < self.x_max_map),
+                                np.logical_and(y_px >= 0, y_px < self.y_max_map))
+        x_px = x_px[select]
+        y_px = y_px[select]
+
+        score = np.sum(np.exp(self.occupancy_map[x_px, y_px]))
+        test = self.occupancy_map[x_px, y_px]
+        
         return score
 
-    def get_corrected_pose(self, odom, odom_pose_ref=None):
+    def get_corrected_pose(self, odom, odom_pose_ref=np.array([0,0,0])):
         """
-        Compute corrected pose in map frame from raw odom pose + odom frame pose,
+        Compute corrected pose in global frame from raw odom pose + odom frame pose,
         either given as second param or using the ref from the object
         odom : raw odometry position
         odom_pose_ref : optional, origin of the odom frame if given,
                         use self.odom_pose_ref if not given
         """
         # TODO for TP4
-        corrected_pose = odom_pose
+
+        # treats case of second argument null
+        if (odom_pose_ref == np.array([0,0,0])).all():
+            odom_pose_ref = self.odom_pose_ref
+
+        # angle global = angle repaire + angle mesure
+        corrected_pose = [0,0,odom[2]+odom_pose_ref[2]]
+        d = np.linalg.norm(odom[:2])
+        alpha = np.arctan2(odom[1],odom[0])
+        
+        # corrected position
+        #               x = xr               + d * cos(alpha + theta_0)
+        corrected_pose[0] = odom_pose_ref[0] + d * np.cos(alpha+odom_pose_ref[2])
+        #               y = yr               + d * sin(alpha + theta_0)
+        corrected_pose[1] = odom_pose_ref[1] + d * np.sin(alpha+odom_pose_ref[2])
 
         return corrected_pose
 
@@ -162,7 +202,34 @@ class TinySlam:
         """
         # TODO for TP4
 
-        best_score = 0
+        # score with current reference
+        best_pose_ref  = self.odom_pose_ref
+        best_score = self.score(lidar, self.get_corrected_pose(odom,best_pose_ref))
+        # print('Score avant :', best_score)
+        # print('Pose avant    :', best_pose_ref)
+
+        # generates random perturbations to the pose
+        delta = np.array([np.random.normal(0, var_x, N_it_loc), 
+                 np.random.normal(0, var_y, N_it_loc),
+                 np.random.normal(0, var_ang, N_it_loc)])
+        
+        # tries with random positions
+        for i in range(N_it_loc):
+            pose_it = self.get_corrected_pose(odom,best_pose_ref+delta.T[i])
+            score = self.score(lidar, pose_it)
+
+            # updates
+            if score > best_score:
+                print('melhor score')
+                best_score = score
+                best_pose_ref = best_pose_ref + delta.T[i]
+
+        # updates best position and returns
+        #print(count,best_score,best_pose,self.odom_pose_ref)
+        self.odom_pose_ref = best_pose_ref
+
+        # print('Score best  :', best_score)
+        # print('Pose nouvelle :', best_pose_ref)
 
         return best_score
 

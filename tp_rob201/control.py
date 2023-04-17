@@ -22,7 +22,7 @@ def reactive_obst_avoid(lidar):
 
     filter = abs(angles) < np.pi/6
     obstacles = values[filter]
-    obstacles = obstacles[obstacles < 30]
+    obstacles = obstacles[obstacles < 50]
 
     if len(obstacles) > 0: # not empty
         command = {"forward": 0,
@@ -60,7 +60,6 @@ def potential_field_control(lidar, pose, goal):
     grad_pos = (K/np.linalg.norm(dist_vec[:2]))*dist_vec[:2]
 
     delta_rot = np.arctan2(grad_pos[1],grad_pos[0]) - pose[2]
-    print(delta_rot)
     Krot = 1
     rot = Krot * delta_rot
 
@@ -79,7 +78,7 @@ def potential_field_control(lidar, pose, goal):
         command = {"forward": 0,
                "rotation": 0}
     else:
-        command = {"forward": 0.1*np.linalg.norm(grad_pos),
+        command = {"forward": 0.1*np.linalg.norm(dist_vec[:2]),
                    "rotation": rot}
 
     return command

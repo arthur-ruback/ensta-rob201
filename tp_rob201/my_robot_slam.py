@@ -39,22 +39,37 @@ class MyRobotSlam(RobotAbstract):
 
         # storage for pose after localization
         self.corrected_pose = np.array([0, 0, 0])
+        self.lastScore = 0
 
     def control(self):
         """
         Main control function executed at each time step
         """
-        objectif = np.array([-50,-200,1])
 
-        # Compute new command speed to perform obstacle avoidance
-        #command = potential_field_control(self.lidar(),self.odometer_values(),objectif)
-        command = reactive_obst_avoid(self.lidar())
+        if self.counter == 0:
+            self.tiny_slam.update_map(self.lidar(),self.odometer_values())
+            score = self.tiny_slam.localise(self.lidar(),self.odometer_values())
+        else:
+            score = self.tiny_slam.localise(self.lidar(),self.odometer_values())
+            print(score)
+            if score > 20:
+                self.tiny_slam.update_map(self.lidar(),self.tiny_slam.get_corrected_pose(self.odometer_values()))
 
-        self.tiny_slam.update_map(self.lidar(),self.odometer_values())
-
+        # affichage
         if self.counter % 10 == 0:
-            self.tiny_slam.display2(self.odometer_values())
+            self.tiny_slam.display2(self.tiny_slam.get_corrected_pose(self.odometer_values()))
+            # print('     True position: ', [int(self.true_position()[0]), int(self.true_position()[1]), int(self.true_angle())])
+            # print('Estimated position: ', self.odometer_values().astype(int)+[439, 200, 0])
 
         self.counter += 1
 
+        #sleep(0.2)
+
+        command = reactive_obst_avoid(self.lidar())
+
         return command
+
+
+# Compute new command speed to perform obstacle avoidance
+#objectif = np.array([-50,-200,1])
+#command = potential_field_control(self.lidar(),self.odometer_values(),objectif)
