@@ -5,18 +5,19 @@ import pickle
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
+import heapq
 
-PROB_SOIL = 1
+PROB_SOIL = 4
 # PROF_FORTE = 0.99
 # PROB_FAIBLE = 0.1
 # prob_faible = np.log(PROB_FAIBLE/(1-PROB_FAIBLE))
 # prob_forte = np.log(PROF_FORTE/(1-PROF_FORTE)) + prob_faible
-prob_forte = 0.5
-prob_faible = -0.1
-N_it_loc = 100
+prob_forte = 0.4
+prob_faible = -0.05
+N_it_loc = 150
 var_x = 3
 var_y = 3
-var_ang = 0.1
+var_ang = 0.01
 
 class TinySlam:
     """Simple occupancy grid SLAM"""
@@ -75,8 +76,9 @@ class TinySlam:
         x_0, y_0 : starting point coordinates in m
         x_1, y_1 : end point coordinates in m
         val : value to add to each cell of the line
+        MODIF1 : dont change the final value of the cell
+        MODIF2 : add value 0 to cell avant as a way of interpolating 
         """
-
         # convert to pixels
         x_start, y_start = self._conv_world_to_map(x_0, y_0)
         x_end, y_end = self._conv_world_to_map(x_1, y_1)
@@ -87,6 +89,7 @@ class TinySlam:
         if x_end < 0 or x_end >= self.x_max_map or y_end < 0 or y_end >= self.y_max_map:
             return
 
+        flag_swap = False
         # Bresenham line drawing
         dx = x_end - x_start
         dy = y_end - y_start
@@ -94,28 +97,41 @@ class TinySlam:
         if is_steep:  # rotate line
             x_start, y_start = y_start, x_start
             x_end, y_end = y_end, x_end
+            flag_swap = True
         # swap start and end points if necessary and store swap state
         if x_start > x_end:
             x_start, x_end = x_end, x_start
             y_start, y_end = y_end, y_start
-        dx = x_end - x_start  # recalculate differentials
-        dy = y_end - y_start  # recalculate differentials
+            flag_swap = True
+        dx = x_end - x_start # recalculate differentials
+        dy = y_end - y_start # recalculate differentials
         error = int(dx / 2.0)  # calculate error
         y_step = 1 if y_start < y_end else -1
         # iterate over bounding box generating points between start and end
         y = y_start
         points = []
-        for x in range(x_start, x_end + 1):
-            coord = [y, x] if is_steep else [x, y]
-            points.append(coord)
-            error -= abs(dy)
-            if error < 0:
-                y += y_step
-                error += dx
-        points = np.array(points).T
+        if flag_swap == False:
+            for x in range(x_start, x_end-3):
+                coord = [y, x] if is_steep else [x, y]
+                points.append(coord)
+                error -= abs(dy)
+                if error < 0:
+                    y += y_step
+                    error += dx
+            points = np.array(points).T
+        else:
+            for x in range(x_start+3, x_end):
+                coord = [y, x] if is_steep else [x, y]
+                points.append(coord)
+                error -= abs(dy)
+                if error < 0:
+                    y += y_step
+                    error += dx
+            points = np.array(points).T
 
         # add value to the points
-        self.occupancy_map[points[0], points[1]] += val
+        if len(points) != 0: 
+            self.occupancy_map[points[0], points[1]] += val
 
     def add_map_points(self, points_x, points_y, val):
         """
@@ -157,17 +173,16 @@ class TinySlam:
 
         # get nearest grid point in the map and add its value to score
         x_px, y_px = self._conv_world_to_map(x,y)
-        select = np.logical_and(np.logical_and(x_px >= 0, x_px < self.x_max_map),
-                                np.logical_and(y_px >= 0, y_px < self.y_max_map))
+        select = np.logical_and(np.logical_and(x_px > 0, x_px < self.x_max_map),
+                                np.logical_and(y_px > 0, y_px < self.y_max_map))
         x_px = x_px[select]
         y_px = y_px[select]
 
         score = np.sum(np.exp(self.occupancy_map[x_px, y_px]))
-        test = self.occupancy_map[x_px, y_px]
         
         return score
 
-    def get_corrected_pose(self, odom, odom_pose_ref=np.array([0,0,0])):
+    def get_corrected_pose(self, odom, odom_pose_ref=None):
         """
         Compute corrected pose in global frame from raw odom pose + odom frame pose,
         either given as second param or using the ref from the object
@@ -178,7 +193,7 @@ class TinySlam:
         # TODO for TP4
 
         # treats case of second argument null
-        if (odom_pose_ref == np.array([0,0,0])).all():
+        if odom_pose_ref is None:
             odom_pose_ref = self.odom_pose_ref
 
         # angle global = angle repaire + angle mesure
@@ -209,20 +224,22 @@ class TinySlam:
         # print('Pose avant    :', best_pose_ref)
 
         # generates random perturbations to the pose
-        delta = np.array([np.random.normal(0, var_x, N_it_loc), 
-                 np.random.normal(0, var_y, N_it_loc),
-                 np.random.normal(0, var_ang, N_it_loc)])
         
         # tries with random positions
-        for i in range(N_it_loc):
-            pose_it = self.get_corrected_pose(odom,best_pose_ref+delta.T[i])
+        it = 0
+        while it < N_it_loc:
+            delta = np.array([np.random.normal(0, var_x, 1), 
+                    np.random.normal(0, var_y, 1),
+                    np.random.normal(0, var_ang, 1)])
+            pose_it = self.get_corrected_pose(odom,best_pose_ref+delta.T[0])
             score = self.score(lidar, pose_it)
+            it += 1
 
             # updates
             if score > best_score:
-                print('melhor score')
                 best_score = score
-                best_pose_ref = best_pose_ref + delta.T[i]
+                best_pose_ref = best_pose_ref + delta.T[0]
+                it = 0
 
         # updates best position and returns
         #print(count,best_score,best_pose,self.odom_pose_ref)
@@ -254,20 +271,32 @@ class TinySlam:
         # dans le repaire absolut (ou au moins ce qu'il pense le robot)
         points = np.vstack((x,y))
 
-        for pair in points.T:
-            self.add_map_line(pose[0],pose[1],pair[0],pair[1],prob_faible)
-
         # only the values that are obstacles
-        mask = values < lidar.max_range
+        mask = values < lidar.max_range-10
         x = x[mask]
         y = y[mask]
 
         self.add_map_points(x,y,prob_forte)
 
+        values = lidar.get_sensor_values()
+        values -= 10
+        angles = lidar.get_ray_angles()
+
+        # repaire du robot: x devant et y sur la gauche
+        x = pose[0] + values * np.cos(angles+pose[2])
+        y = pose[1] + values * np.sin(angles+pose[2])
+
+        # corrige le repaire avec la pose du robot
+
+        # dans le repaire absolut (ou au moins ce qu'il pense le robot)
+        points = np.vstack((x,y))
+
+        for pair in points.T:
+            self.add_map_line(pose[0],pose[1],pair[0],pair[1],prob_faible)
+
         # seuillage
         self.occupancy_map[self.occupancy_map > PROB_SOIL] = PROB_SOIL
         self.occupancy_map[self.occupancy_map < -PROB_SOIL] = -PROB_SOIL
-
 
     def plan(self, start, goal):
         """
@@ -354,3 +383,25 @@ class TinySlam:
         filename : base name (without extension) of file on disk
         """
         # TODO
+        pass
+
+    def get_neighbors(self, current):
+        li = []
+        # iterate through neighbors
+        for ip in range(-1,2,1):
+            for jp in range(-1,2,1):
+                if not((ip == 0) and (jp == 0)):
+                    i = ip + current[0]
+                    j = jp + current[1]
+                    # if empty
+                    if self.occupancy_map[i,j] < 0:
+                        li.append([i,j])
+        return li
+    
+    def heuristic(self, a, b):
+        return np.sqrt((a[0]-b[0])^2+(a[1]-b[1])^2)
+                        
+
+
+
+

@@ -11,7 +11,7 @@ from place_bot.entities.lidar import LidarParams
 
 from tiny_slam import TinySlam
     
-from control import reactive_obst_avoid, potential_field_control
+from control import reactive_obst_avoid, potential_field_control, findWall
 
 
 # Definition of our robot controller
@@ -29,8 +29,14 @@ class MyRobotSlam(RobotAbstract):
         # step counter to deal with init and display
         self.counter = 0
 
+        # objectif
+        self.objectifList = [[-250,-400,1], [-400,-500,1], [-500,-370,1], [-210,-270,1], [-300,-240,1], [-500,-300,1], [-500,-120,1]]
+        self.i = 0
+
+        self.objectif = np.array([0,0,0])
+
         # Init SLAM object
-        self._size_area = (800, 800)
+        self._size_area = (1200, 1200)
         self.tiny_slam = TinySlam(x_min=- self._size_area[0],
                                   x_max=self._size_area[0],
                                   y_min=- self._size_area[1],
@@ -41,22 +47,34 @@ class MyRobotSlam(RobotAbstract):
         self.corrected_pose = np.array([0, 0, 0])
         self.lastScore = 0
 
+        self.flagWallFound = False
+
     def control(self):
+        #print(self.odometer_values())
         """
         Main control function executed at each time step
         """
+        # Compute new command speed to perform obstacle avoidance
 
-        if self.counter == 0:
+        # self.objectif bon
+        # self.objectif dur
+        #self.objectif = np.array([-200,50,1])
+        #print(self.counter)
+
+        if self.counter < 2:
             self.tiny_slam.update_map(self.lidar(),self.odometer_values())
             score = self.tiny_slam.localise(self.lidar(),self.odometer_values())
+            self.last_score = score
+            
         else:
             score = self.tiny_slam.localise(self.lidar(),self.odometer_values())
-            print(score)
-            if score > 20:
+            #print(score, 0.95*self.last_score)
+            if score > 50:
                 self.tiny_slam.update_map(self.lidar(),self.tiny_slam.get_corrected_pose(self.odometer_values()))
+                self.last_score = score
 
         # affichage
-        if self.counter % 10 == 0:
+        if self.counter % 1 == 0:
             self.tiny_slam.display2(self.tiny_slam.get_corrected_pose(self.odometer_values()))
             # print('     True position: ', [int(self.true_position()[0]), int(self.true_position()[1]), int(self.true_angle())])
             # print('Estimated position: ', self.odometer_values().astype(int)+[439, 200, 0])
@@ -64,12 +82,26 @@ class MyRobotSlam(RobotAbstract):
         self.counter += 1
 
         #sleep(0.2)
+        if (self.flagWallFound == False):
+            command, self.flagWallFound = findWall(self.lidar())
+            print("finding wall")
+        else:
+            command = reactive_obst_avoid(self.lidar())
+        # flag_next_point = False
+        # command, flag_next_point = potential_field_control(self.lidar(),self.odometer_values(),self.objectif)
+        # if flag_next_point:
+        #     if(self.i < len(self.objectifList)):
+        #         self.objectif = self.objectifList[self.i]
+        #         self.i += 1
+        #     else:
+        #         print("Done!")
 
-        command = reactive_obst_avoid(self.lidar())
+        
 
         return command
 
 
-# Compute new command speed to perform obstacle avoidance
-#objectif = np.array([-50,-200,1])
-#command = potential_field_control(self.lidar(),self.odometer_values(),objectif)
+
+'''
+
+'''

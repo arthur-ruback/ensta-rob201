@@ -1,5 +1,6 @@
 import math
 import random
+import numpy as np
 from typing import Type, Union
 
 from place_bot.entities.robot_abstract import RobotAbstract
@@ -27,5 +28,6 @@ class MyWorld(WorldAbstract):
         # TODO: changerr
         angle = 0
         self._robot_pos = ((439.0, 200.0), angle)
+        #self._robot_pos = ((520.0, 200.0), angle)
         self._playground.add(robot, self._robot_pos)
         
