@@ -1,67 +1,6 @@
 """ A set of robotics control functions """
 
 import numpy as np
-from operator import itemgetter
-
-# def reactive_obst_avoid(lidar):
-#     """
-#     Simple obstacle avoidance
-#     lidar : placebot object with lidar data
-#     """
-#     # TODO for TP1
-
-#     values = lidar.get_sensor_values()
-#     angles = lidar.get_ray_angles()
-#     #print(lidar.max_range)
-
-    
-#     #print(values)
-  
-#     #print(d)
-
-#     #print(values)
-#     #print(angles[181:len(angles)])
-#     #for i in range(181,len(angles)):
-#     #    d = 
-#     #print(angles)
-
-
-#     d_max = np.max(values)
-#     d_min = np.min(values)
-#     sum = 0
-#     for i in range(178, 182):
-#         sum = sum + values[i]
-#     d_mean = sum/5
-#     forward = (values[180]-d_min)/(d_max)
-#     #print(forward)
-#     idx_max = np.argmax(values)
-#     #print(angles[idx_max])
-#     #rotation = (angles[idx_max]/pi)
-
-#     #rotation = random.randint(0, 360)
-#     i_max = np.argmax(values)
-#     if forward < 0.2:
-#         if i_max < 180:
-#             rotation = random.randint(-10,0)/10
-#         else:
-#             rotation = random.randint(0,10)/10  
-#     else:
-#         rotation = 0
-
-
-    
-
-#    # if forward < 0.1:
-#         #rotation = random.randint(-10, 10)/10
-#     #    rotation = random.randint(-1,0)
-#     #else:
-#     #    rotation = 0
-
-
-#     command = {"forward": forward,
-#                "rotation": rotation}
-
-#     return command
 
 def findWall(lidar):
     values = lidar.get_sensor_values()
@@ -97,8 +36,6 @@ def reactive_obst_avoid(lidar):
     Simple obstacle avoidance
     lidar : placebot object with lidar data
     """
-    # TP1
-
 
     values = lidar.get_sensor_values()
     angles = lidar.get_ray_angles()
@@ -121,20 +58,13 @@ def reactive_obst_avoid(lidar):
     if np.min(front) < 35:
         turn = 0.3
         speed = 0
-        #print("wall in front")
-    # if far from right wall, get closer
-    # elif dx > 5:
-    #     turn = -0.2
-    #     speed = 0.1
-    #     print("aproxaing to the right")
-    # follow right wall
+
     elif np.mean(right) < 30:
         k = 0.01
         turn = -k*dx
         turn = np.clip(turn,-0.3,0.3)
         speed = 0.1
-        #print("controle")
-    #print(dx,turn)
+
     command = {"forward": speed,
                 "rotation": turn}
     return command
@@ -146,19 +76,10 @@ def potential_field_control(lidar, pose, goal):
     pose : [x, y, theta] nparray, current pose in odom or world frame
     goal : [x, y, theta] nparray, target pose in odom or world frame
     """
-   # TODO for TP2
 
     values = lidar.get_sensor_values()
     angles = lidar.get_ray_angles()
     cart = np.vstack((values,angles))
-
-    # constants de reglage
-    SECURITY_DIST = 100
-
-    # # repulsion obstacle plus proche
-    # obst = min(cart.T, key=itemgetter(0))
-    # print(obst)
-    # vec_repul = 
 
     # attraction au objectif
     K = 1
@@ -168,8 +89,6 @@ def potential_field_control(lidar, pose, goal):
     delta_rot = np.arctan2(grad_pos[1],grad_pos[0]) - pose[2]
     Krot = 1
     rot = Krot * delta_rot
-
-    
 
     # reglage limites comandes
     if rot < -1:
@@ -187,7 +106,7 @@ def potential_field_control(lidar, pose, goal):
 
     return command
 
-
+# with repulsion
 # def potential_field_control(lidar, pose, goal):
 #     """
 #     Control using potential field for goal reaching and obstacle avoidance

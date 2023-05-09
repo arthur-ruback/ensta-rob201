@@ -163,9 +163,6 @@ class TinySlam:
         values = values[mask]
         angles = angles[mask]
 
-        # get updated pose
-        #pose = self.get_corrected_pose(pose)
-
         # repaire du robot: x devant et y sur la gauche
         x = pose[0] + values * np.cos(angles+pose[2])
         y = pose[1] + values * np.sin(angles+pose[2])
@@ -189,7 +186,6 @@ class TinySlam:
         odom_pose_ref : optional, origin of the odom frame if given,
                         use self.odom_pose_ref if not given
         """
-        # TODO for TP4
 
         # treats case of second argument null
         if odom_pose_ref is None:
@@ -214,13 +210,10 @@ class TinySlam:
         lidar : placebot object with lidar data
         odom : [x, y, theta] nparray, raw odometry position
         """
-        # TODO for TP4
 
         # score with current reference
         best_pose_ref  = self.odom_pose_ref
         best_score = self.score(lidar, self.get_corrected_pose(odom,best_pose_ref))
-        # print('Score avant :', best_score)
-        # print('Pose avant    :', best_pose_ref)
 
         # generates random perturbations to the pose
         
@@ -241,11 +234,7 @@ class TinySlam:
                 it = 0
 
         # updates best position and returns
-        #print(count,best_score,best_pose,self.odom_pose_ref)
         self.odom_pose_ref = best_pose_ref
-
-        # print('Score best  :', best_score)
-        # print('Pose nouvelle :', best_pose_ref)
 
         return best_score
 
@@ -255,7 +244,6 @@ class TinySlam:
         lidar : placebot object with lidar data
         pose : [x, y, theta] nparray, corrected pose in world coordinates
         """
-        # TODO for TP3
 
 
         values = lidar.get_sensor_values()
@@ -307,6 +295,8 @@ class TinySlam:
         start = self._conv_world_to_map(start[0],start[1])
         goal = self._conv_world_to_map(goal[0],goal[1])
 
+        # creates a copy of occupancy map to modify it and take into account 
+        # a margin in the walls
         occupancy_map = copy.deepcopy(self.occupancy_map)
         kernel = np.ones((15,15), dtype=int)
         occupancy_map[occupancy_map < 0] = 0

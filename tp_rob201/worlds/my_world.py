@@ -25,8 +25,6 @@ class MyWorld(WorldAbstract):
 
         # POSITION OF THE ROBOT
         angle = random.uniform(-math.pi, math.pi) # math.pi/2.0
-        # TODO: changerr
-        angle = 0
         self._robot_pos = ((439.0, 200.0), angle)
         #self._robot_pos = ((520.0, 200.0), angle)
         self._playground.add(robot, self._robot_pos)

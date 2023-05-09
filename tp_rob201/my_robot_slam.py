@@ -55,37 +55,32 @@ class MyRobotSlam(RobotAbstract):
         self.traj_i = 0
 
     def control(self):
-        #print(self.odometer_values())
         """
         Main control function executed at each time step
         """
-        # Compute new command speed to perform obstacle avoidance
-
-        # self.objectif bon
-        # self.objectif dur
-        #self.objectif = np.array([-200,50,1])
-        #print(self.counter)
+        exploratory_iter = 4700
 
         # initialization
         if self.counter < 10:
             self.tiny_slam.update_map(self.lidar(),self.odometer_values())
             score = self.tiny_slam.localise(self.lidar(),self.odometer_values())
             self.last_score = score
-            
+
+        # general case
         else:
             score = self.tiny_slam.localise(self.lidar(),self.odometer_values())
             if score > 50:
                 self.tiny_slam.update_map(self.lidar(),self.tiny_slam.get_corrected_pose(self.odometer_values()))
                 self.last_score = score
 
-
         self.counter += 1
 
         # initial map
         if self.counter < 100:
             command = {"forward": 0, "rotation": 0}
+
         # wallfollow to create map
-        elif self.counter < 4700:
+        elif self.counter < exploratory_iter:
             if (self.flagWallFound == False):
                 command, self.flagWallFound = findWall(self.lidar())
                 print("finding wall")
@@ -94,34 +89,37 @@ class MyRobotSlam(RobotAbstract):
 
         # follow path from A*
         else:
-            # if goal was atteined, get next one
+            # as the resolution of the trajectory is o high, sample it
             jump = 10
+
             pose = self.tiny_slam.get_corrected_pose(self.odometer_values())[:2]
             goal = [0,0]
             goal[0],goal[1] = self.tiny_slam._conv_map_to_world(self.trajPoint[0],self.trajPoint[1])
             dist = np.sqrt((goal[0]-pose[0])**2+(goal[1]-pose[1])**2)
-            print(dist)
 
+            # if goal was atteined, get next one
             if(dist < 10):
                 self.traj_i += jump
                 if(self.traj_i > len(self.trajectory)):
                     print('We are done, press any key to end')
                     foo = input()
                     exit
+                #update next goal
                 self.trajPoint = self.trajectory[self.traj_i]
 
-            goal = np.array([0,0,0])
-            goal[0],goal[1] = self.tiny_slam._conv_map_to_world(self.trajPoint[0],self.trajPoint[1])
             command = potential_field_control(self.lidar(), np.array(self.tiny_slam.get_corrected_pose(self.odometer_values())),goal)
 
-        if self.counter == 4700:
+        # calculates A* one time
+        if self.counter == exploratory_iter:
             self.trajectory = self.tiny_slam.plan(self.tiny_slam.get_corrected_pose(self.odometer_values()), [0,0])
             self.trajPoint = self.trajectory[0]
 
         # affichage
         if self.counter % 2 == 0:
-            if self.counter <= 4700:
+            # without trajectory
+            if self.counter <= exploratory_iter:
                 self.tiny_slam.display2(self.tiny_slam.get_corrected_pose(self.odometer_values()))
+            # with trajectory
             else:
                 self.tiny_slam.display2(self.tiny_slam.get_corrected_pose(self.odometer_values()), self.trajectory)
                 
