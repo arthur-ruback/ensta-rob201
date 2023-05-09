@@ -49,6 +49,11 @@ class MyRobotSlam(RobotAbstract):
 
         self.flagWallFound = False
 
+        self.trajectory = []
+
+        self.trajPoint = [0,0,0]
+        self.traj_i = 0
+
     def control(self):
         #print(self.odometer_values())
         """
@@ -61,6 +66,7 @@ class MyRobotSlam(RobotAbstract):
         #self.objectif = np.array([-200,50,1])
         #print(self.counter)
 
+        # initialization
         if self.counter < 2:
             self.tiny_slam.update_map(self.lidar(),self.odometer_values())
             score = self.tiny_slam.localise(self.lidar(),self.odometer_values())
@@ -68,25 +74,57 @@ class MyRobotSlam(RobotAbstract):
             
         else:
             score = self.tiny_slam.localise(self.lidar(),self.odometer_values())
-            #print(score, 0.95*self.last_score)
             if score > 50:
                 self.tiny_slam.update_map(self.lidar(),self.tiny_slam.get_corrected_pose(self.odometer_values()))
                 self.last_score = score
 
-        # affichage
-        if self.counter % 1 == 0:
-            self.tiny_slam.display2(self.tiny_slam.get_corrected_pose(self.odometer_values()))
-            # print('     True position: ', [int(self.true_position()[0]), int(self.true_position()[1]), int(self.true_angle())])
-            # print('Estimated position: ', self.odometer_values().astype(int)+[439, 200, 0])
 
         self.counter += 1
 
-        #sleep(0.2)
-        if (self.flagWallFound == False):
-            command, self.flagWallFound = findWall(self.lidar())
-            print("finding wall")
+        # initial map
+        if self.counter < 100:
+            command = {"forward": 0, "rotation": 0}
+        # wallfollow to create map
+        elif self.counter < 3000:
+            if (self.flagWallFound == False):
+                command, self.flagWallFound = findWall(self.lidar())
+                print("finding wall")
+            else:
+                command = reactive_obst_avoid(self.lidar())
+
+        # follow path from A*
         else:
-            command = reactive_obst_avoid(self.lidar())
+            # if goal was atteined, get next one
+            jump = 10
+            pose = self.tiny_slam.get_corrected_pose(self.odometer_values())[:2]
+            goal = [0,0]
+            goal[0],goal[1] = self.tiny_slam._conv_map_to_world(self.trajPoint[0],self.trajPoint[1])
+            dist = np.sqrt((goal[0]-pose[0])**2+(goal[1]-pose[1])**2)
+            print(dist)
+
+            if(dist < 10):
+                self.traj_i += jump
+                if(self.traj_i > len(self.trajectory)):
+                    print('We are done, press any key to end')
+                    foo = input()
+                    exit
+                self.trajPoint = self.trajectory[self.traj_i]
+
+            goal = np.array([0,0,0])
+            goal[0],goal[1] = self.tiny_slam._conv_map_to_world(self.trajPoint[0],self.trajPoint[1])
+            command = potential_field_control(self.lidar(), np.array(self.tiny_slam.get_corrected_pose(self.odometer_values())),goal)
+
+        if self.counter == 3000:
+            self.trajectory = self.tiny_slam.plan(self.tiny_slam.get_corrected_pose(self.odometer_values()), [0,0])
+            self.trajPoint = self.trajectory[0]
+
+        # affichage
+        if self.counter % 2 == 0:
+            if self.counter <= 3000:
+                self.tiny_slam.display2(self.tiny_slam.get_corrected_pose(self.odometer_values()))
+            else:
+                self.tiny_slam.display2(self.tiny_slam.get_corrected_pose(self.odometer_values()), self.trajectory)
+                
         # flag_next_point = False
         # command, flag_next_point = potential_field_control(self.lidar(),self.odometer_values(),self.objectif)
         # if flag_next_point:
@@ -97,7 +135,7 @@ class MyRobotSlam(RobotAbstract):
         #         print("Done!")
 
         
-
+        print(self.counter)
         return command
 
 

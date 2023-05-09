@@ -6,12 +6,10 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 import heapq
+import math
+from collections import defaultdict
 
 PROB_SOIL = 4
-# PROF_FORTE = 0.99
-# PROB_FAIBLE = 0.1
-# prob_faible = np.log(PROB_FAIBLE/(1-PROB_FAIBLE))
-# prob_forte = np.log(PROF_FORTE/(1-PROF_FORTE)) + prob_faible
 prob_forte = 0.4
 prob_faible = -0.05
 N_it_loc = 150
@@ -111,7 +109,7 @@ class TinySlam:
         y = y_start
         points = []
         if flag_swap == False:
-            for x in range(x_start, x_end-3):
+            for x in range(x_start, x_end):
                 coord = [y, x] if is_steep else [x, y]
                 points.append(coord)
                 error -= abs(dy)
@@ -120,7 +118,7 @@ class TinySlam:
                     error += dx
             points = np.array(points).T
         else:
-            for x in range(x_start+3, x_end):
+            for x in range(x_start, x_end):
                 coord = [y, x] if is_steep else [x, y]
                 points.append(coord)
                 error -= abs(dy)
@@ -304,12 +302,45 @@ class TinySlam:
         start : [x, y, theta] nparray, start pose in world coordinates
         goal : [x, y, theta] nparray, goal pose in world coordinates
         """
-        # TODO for TP5
 
-        path = [start, goal]  # list of poses
-        return path
+        start = self._conv_world_to_map(start[0],start[1])
+        goal = self._conv_world_to_map(goal[0],goal[1])
 
-    def display(self, robot_pose):
+        # min heap to contain values to explore next
+        openset = [(0,start)]
+        heapq.heapify(openset)
+        
+        # dictionary to trace back route
+        cameFrom = {}
+
+        # cost to get to each cell
+        gScore = defaultdict(lambda:math.inf)
+        gScore[start] = 0
+
+        # best guess of cost for each cell 
+        fScore = defaultdict(lambda:math.inf)
+        fScore[start] = self.heuristic(start,goal)
+
+        while len(openset) > 0:
+            current = heapq.heappop(openset)
+            if current[1] == goal:
+                return self.reconstructPath(cameFrom, goal)
+            
+            neighbours = self.get_neighbors(current[1])
+            for cell in neighbours:
+                tentativeGScore = gScore[current[1]] + self.heuristic(current[1],cell)
+                if tentativeGScore < gScore[cell]:
+                    # better path, recording it
+                    cameFrom[cell] = current[1]
+                    gScore[cell] = tentativeGScore
+                    fScore[cell] = tentativeGScore + self.heuristic(cell,goal)
+                    if cell not in openset:
+                        heapq.heappush(openset,(tentativeGScore, cell))
+
+        # goal was never reached
+        return []
+
+    def display(self, robot_pose,):
         """
         Screen display of map and robot pose, using matplotlib
         robot_pose : [x, y, theta] nparray, corrected robot pose
@@ -329,7 +360,7 @@ class TinySlam:
         # plt.show()
         plt.pause(0.001)
 
-    def display2(self, robot_pose):
+    def display2(self, robot_pose, trajectory = []):
         """
         Screen display of map and robot pose,
         using opencv (faster than the matplotlib version)
@@ -353,10 +384,20 @@ class TinySlam:
         pt2 = (int(pt2_x), int(pt2_y))
         cv2.arrowedLine(img=img2, pt1=pt1, pt2=pt2,
                         color=(0, 0, 255), thickness=2)
+        
+        traj_world = []
+        for x,y in trajectory:
+            traj_world.append((self._conv_map_to_world(x,y)))
+        trajectory = []
+        for x,y in traj_world:
+            trajectory.append((self._conv_world_to_map(x,-y)))
+        for i in range(len(trajectory)-1):
+            cv2.line(img2, trajectory[i], trajectory[i+1], (255, 128, 0), 1)
+
         cv2.imshow("map slam", img2)
         cv2.waitKey(1)
 
-    def save(self, filename):
+    def save(self, filename, pose):
         """
         Save map as image and pickle object
         filename : base name (without extension) of file on disk
@@ -375,15 +416,24 @@ class TinySlam:
                          'x_min_world': self.x_min_world,
                          'x_max_world': self.x_max_world,
                          'y_min_world': self.y_min_world,
-                         'y_max_world': self.y_max_world}, fid)
+                         'y_max_world': self.y_max_world,
+                         'my_pose': pose}, fid)
 
-    def load(self, filename):
+    def load(self, filename, pose):
         """
         Load map from pickle object
         filename : base name (without extension) of file on disk
         """
-        # TODO
-        pass
+        with open(filename + ".p", "wb") as fid:
+            [self.occupancy_map,
+                self.resolution,
+                self.x_min_world,
+                self.x_max_world,
+                self.y_min_world,
+                self.y_max_world,
+                pose] = pickle.load(fid)
+            
+        # TODO: correct data from pose
 
     def get_neighbors(self, current):
         li = []
@@ -394,14 +444,18 @@ class TinySlam:
                     i = ip + current[0]
                     j = jp + current[1]
                     # if empty
-                    if self.occupancy_map[i,j] < 0:
-                        li.append([i,j])
+                    if self.occupancy_map[i,j] < 2:
+                        li.append((i,j))
         return li
     
     def heuristic(self, a, b):
-        return np.sqrt((a[0]-b[0])^2+(a[1]-b[1])^2)
+        return np.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2)
                         
-
-
+    def reconstructPath(self, cameFrom, current):
+        totalPath = [current]
+        while current in cameFrom.keys():
+            current = cameFrom[current]
+            totalPath.insert(0,current)
+        return totalPath
 
 
