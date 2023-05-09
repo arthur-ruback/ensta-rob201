@@ -182,7 +182,7 @@ def potential_field_control(lidar, pose, goal):
         command = {"forward": 0,
                "rotation": 0}
     else:
-        command = {"forward": 0.1,
+        command = {"forward": 0.2,
                    "rotation": rot}
 
     return command

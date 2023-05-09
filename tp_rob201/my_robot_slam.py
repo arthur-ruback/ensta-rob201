@@ -67,7 +67,7 @@ class MyRobotSlam(RobotAbstract):
         #print(self.counter)
 
         # initialization
-        if self.counter < 2:
+        if self.counter < 10:
             self.tiny_slam.update_map(self.lidar(),self.odometer_values())
             score = self.tiny_slam.localise(self.lidar(),self.odometer_values())
             self.last_score = score
@@ -85,7 +85,7 @@ class MyRobotSlam(RobotAbstract):
         if self.counter < 100:
             command = {"forward": 0, "rotation": 0}
         # wallfollow to create map
-        elif self.counter < 3000:
+        elif self.counter < 4700:
             if (self.flagWallFound == False):
                 command, self.flagWallFound = findWall(self.lidar())
                 print("finding wall")
@@ -114,13 +114,13 @@ class MyRobotSlam(RobotAbstract):
             goal[0],goal[1] = self.tiny_slam._conv_map_to_world(self.trajPoint[0],self.trajPoint[1])
             command = potential_field_control(self.lidar(), np.array(self.tiny_slam.get_corrected_pose(self.odometer_values())),goal)
 
-        if self.counter == 3000:
+        if self.counter == 4700:
             self.trajectory = self.tiny_slam.plan(self.tiny_slam.get_corrected_pose(self.odometer_values()), [0,0])
             self.trajPoint = self.trajectory[0]
 
         # affichage
         if self.counter % 2 == 0:
-            if self.counter <= 3000:
+            if self.counter <= 4700:
                 self.tiny_slam.display2(self.tiny_slam.get_corrected_pose(self.odometer_values()))
             else:
                 self.tiny_slam.display2(self.tiny_slam.get_corrected_pose(self.odometer_values()), self.trajectory)

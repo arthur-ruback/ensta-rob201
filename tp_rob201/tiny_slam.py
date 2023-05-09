@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 import heapq
 import math
 from collections import defaultdict
+import copy
 
 PROB_SOIL = 4
 prob_forte = 0.4
@@ -306,6 +307,13 @@ class TinySlam:
         start = self._conv_world_to_map(start[0],start[1])
         goal = self._conv_world_to_map(goal[0],goal[1])
 
+        occupancy_map = copy.deepcopy(self.occupancy_map)
+        kernel = np.ones((15,15), dtype=int)
+        occupancy_map[occupancy_map < 0] = 0
+        occupancy_map = cv2.filter2D(occupancy_map, -1, kernel)
+
+        cv2.imshow("occupancy map", occupancy_map)
+
         # min heap to contain values to explore next
         openset = [(0,start)]
         heapq.heapify(openset)
@@ -326,7 +334,7 @@ class TinySlam:
             if current[1] == goal:
                 return self.reconstructPath(cameFrom, goal)
             
-            neighbours = self.get_neighbors(current[1])
+            neighbours = self.get_neighbors(current[1], occupancy_map)
             for cell in neighbours:
                 tentativeGScore = gScore[current[1]] + self.heuristic(current[1],cell)
                 if tentativeGScore < gScore[cell]:
@@ -335,10 +343,11 @@ class TinySlam:
                     gScore[cell] = tentativeGScore
                     fScore[cell] = tentativeGScore + self.heuristic(cell,goal)
                     if cell not in openset:
-                        heapq.heappush(openset,(tentativeGScore, cell))
+                        heapq.heappush(openset,(fScore[cell], cell))
 
         # goal was never reached
-        return []
+        print('failed getting to objective')
+        return [start]
 
     def display(self, robot_pose,):
         """
@@ -435,7 +444,7 @@ class TinySlam:
             
         # TODO: correct data from pose
 
-    def get_neighbors(self, current):
+    def get_neighbors(self, current, occupancy_map):
         li = []
         # iterate through neighbors
         for ip in range(-1,2,1):
@@ -444,7 +453,7 @@ class TinySlam:
                     i = ip + current[0]
                     j = jp + current[1]
                     # if empty
-                    if self.occupancy_map[i,j] < 2:
+                    if occupancy_map[i,j] < 0.1:
                         li.append((i,j))
         return li
     
